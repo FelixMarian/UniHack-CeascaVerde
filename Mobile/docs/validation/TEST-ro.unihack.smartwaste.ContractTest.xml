@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="ro.unihack.smartwaste.ContractTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-11-13T18:09:26.659Z" hostname="EDUARD_PC" time="0.405">
+  <properties/>
+  <testcase name="navigationIsRoleScoped" classname="ro.unihack.smartwaste.ContractTest" time="0.016"/>
+  <testcase name="fillThresholdsAndUnknown" classname="ro.unihack.smartwaste.ContractTest" time="0.001"/>
+  <testcase name="bearerAndIncidentJsonContract" classname="ro.unihack.smartwaste.ContractTest" time="0.38"/>
+  <testcase name="logoutAndPasswordAcceptNoContent" classname="ro.unihack.smartwaste.ContractTest" time="0.007"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,37 @@
+{
+  "users": [
+    [
+      "admin",
+      "Admin"
+    ],
+    [
+      "resident1",
+      "Resident"
+    ],
+    [
+      "resident2",
+      "Resident"
+    ],
+    [
+      "company1",
+      "Company"
+    ],
+    [
+      "company2",
+      "Company"
+    ],
+    [
+      "emulator_resident",
+      "Resident"
+    ]
+  ],
+  "incidents": [
+    [
+      "DEMO_BIN_001",
+      "Capac deteriorat - test emulator",
+      "resolved"
+    ]
+  ],
+  "active_sessions": 1,
+  "environment": "isolated local PostgreSQL, emulator; not Tiger Cloud"
+}
