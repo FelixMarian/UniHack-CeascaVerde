@@ -51,7 +51,7 @@ fun routesFor(role: String): List<Pair<String, String>> = when (role) {
                         "dashboard" -> DashboardScreen(state, vm)
                         "report" -> ReportScreen(state, vm) { nav.navigate("incidents") { popUpTo("dashboard") } }
                         "incidents" -> IncidentsScreen(state, vm)
-                        "map" -> MapScreen(state)
+                        "map" -> MapScreen(state, vm)
                         "users" -> UsersScreen(state, vm, "Resident")
                         "companies" -> UsersScreen(state, vm, "Company")
                         "profile" -> ProfileScreen(state, vm)

@@ -36,14 +36,15 @@ fun dateLabel(value: String?): String = value?.let {
 } ?: "Fără măsurători"
 
 @Composable fun BinCard(bin: Bin, action: (@Composable () -> Unit)? = null) {
-    val state = fillState(bin.fill_level)
+    val state = binState(bin)
     val color = when (state) {
         FillState.UNKNOWN -> Color.Gray
         FillState.NORMAL -> Color(0xFF27754A)
         FillState.WARNING -> Color(0xFFAA7800)
         FillState.FULL -> Color(0xFFBE3C37)
+        FillState.DAMAGED -> Color(0xFF70509B)
     }
-    val label = when (state) { FillState.UNKNOWN -> "Fără date"; FillState.NORMAL -> "Disponibil"; FillState.WARNING -> "Se umple"; FillState.FULL -> "Necesită colectare" }
+    val label = when (state) { FillState.UNKNOWN -> "Fără date"; FillState.NORMAL -> "Disponibil"; FillState.WARNING -> "Se umple"; FillState.FULL -> "Necesită colectare"; FillState.DAMAGED -> "Necesită reparație" }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -51,11 +52,11 @@ fun dateLabel(value: String?): String = value?.let {
                     Text(bin.name, style = MaterialTheme.typography.titleMedium)
                     Text(bin.bin_id + if (bin.demo) " • DEMO" else "", style = MaterialTheme.typography.labelMedium)
                 }
-                Text(bin.fill_level?.let { "$it%" } ?: "—", style = MaterialTheme.typography.headlineMedium, color = color)
+                Text(binLevelLabel(bin), style = MaterialTheme.typography.headlineSmall, color = color)
             }
-            if (bin.fill_level != null) LinearProgressIndicator(progress = { bin.fill_level.coerceIn(0, 100) / 100f },
+            if (bin.fill_category == null && bin.fill_level != null) LinearProgressIndicator(progress = { bin.fill_level.coerceIn(0, 100) / 100f },
                 modifier = Modifier.fillMaxWidth(), color = color)
-            Text(label, color = color)
+            Text(if (bin.fill_category != null) "Categorie: ${bin.fill_category} • ${binLevelLabel(bin)}" else label, color = color)
             Text("Actualizat: ${dateLabel(bin.recorded_at)}", style = MaterialTheme.typography.bodySmall)
             action?.invoke()
         }

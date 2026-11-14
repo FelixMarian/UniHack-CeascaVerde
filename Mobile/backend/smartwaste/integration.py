@@ -10,6 +10,10 @@ from dotenv import load_dotenv
 from .db import make_engine, sessions
 from .legacy import LegacyGateway
 from .routes import router
+from .iot import router as iot_router
+from .ultrasonic import router as ultrasonic_router
+from .company import router as company_router
+from .proofs import router as proofs_router
 
 
 class LoginLimiter:
@@ -42,7 +46,12 @@ def install(app: FastAPI, *, engine=None, legacy=None, device_key=None):
     app.state.sw_sessions = sessions(engine if engine is not None else make_engine())
     app.state.sw_legacy = legacy or LegacyGateway(os.getenv('SMARTWASTE_LEGACY_URL', 'http://127.0.0.1:8000'), device_key)
     app.state.sw_limiter = LoginLimiter()
+    app.state.sw_device_key = device_key
     app.include_router(router)
+    app.include_router(iot_router)
+    app.include_router(ultrasonic_router)
+    app.include_router(company_router)
+    app.include_router(proofs_router)
 
     @app.exception_handler(SQLAlchemyError)
     async def database_error(request, exc):

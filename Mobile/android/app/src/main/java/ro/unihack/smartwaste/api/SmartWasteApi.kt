@@ -4,6 +4,10 @@ import ro.unihack.smartwaste.model.*
 import retrofit2.http.*
 
 interface SmartWasteApi {
+    @PUT("api/v1/companies/{id}/hq") suspend fun hq(@Path("id") id: Int, @Body request: HQInput): User
+    @PATCH("api/v1/bins/{id}/damage") suspend fun damage(@Path("id") id: String, @Body request: DamageInput): Map<String, Any>
+    @POST("api/v1/company/route") suspend fun route(): CollectionRoute
+    @POST("api/v1/incidents/{id}/proof") suspend fun proof(@Path("id") id: Int): IncidentProof
     @POST("api/v1/auth/login") suspend fun login(@Body request: LoginRequest): LoginResponse
     @GET("api/v1/auth/me") suspend fun me(): User
     @POST("api/v1/auth/logout") suspend fun logout()

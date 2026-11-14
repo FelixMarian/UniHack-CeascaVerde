@@ -1,10 +1,14 @@
 # SmartWaste — UniHack 2026
 
+**Update 1.2.0:** IP `10.247.174.231`, categorii 1–4 (inclusiv deteriorat), HQ pentru companii, GPS la cerere, generare ordine de colectare și dovezi Solana Devnet pentru sesizările locatarilor. Instalare și activare: [docs/UPDATE-1.2.0.md](docs/UPDATE-1.2.0.md). APK-ul necesită și actualizarea backend-ului. Validare curentă: 61 teste backend și 6 teste Android, build reușit, lint fără erori. Solana este testată local cu semnare reală și RPC simulat; activarea portofelului și verificarea pe telefon/Pi rămân pașii de instalare. Informațiile de mai jos descriu și livrările anterioare.
+
 Aplicație Android nativă Kotlin/Compose și extensie modulară pentru backend-ul FastAPI existent. Toate ecranele folosesc API-ul; nu există un mod mock în APK. Android nu se conectează la PostgreSQL și nu conține cheia dispozitivelor.
 
 **Stare livrare:** APK compilat, 10 teste backend (inclusiv PostgreSQL) și 4 teste Android trecute; fluxuri verificate în emulator. Extensia trebuie instalată pe Raspberry Pi înainte de login în APK-ul livrat. Harta necesită cheia Google Maps proprie. Vezi `docs/VALIDATION.md` pentru limitele exacte.
 
 ## Structură
+
+Update trei ultrasonici: vezi `lora/ULTRASONIC_SETUP.md`. FastAPI clasifică distanțele în 1=Gol, 2=Mediu, 3=Plin prin `/iot/ultrasonic-readings`. Necesită migrarea aditivă `002_ultrasonic.sql`, calibrarea pragurilor `#define` și APK-ul 1.1.0. Teste locale: 51 backend/parser + 5 Android. Praguri laterale 5 cm; validare de sus 10 cm pentru Mediu și 5 cm pentru Plin. Instalarea acestui update pe Pi nu a fost efectuată (SSH indisponibil).
 
 - `android/`: proiect Android Studio, Material 3, MVVM, Navigation Compose, Retrofit/OkHttp, Google Maps.
 - `backend/smartwaste/`: autentificare, autorizare, servicii și API-uri noi.
@@ -118,6 +122,6 @@ Testele rapide folosesc SQLite temporar și un adaptor de senzori de test, separ
 
 ## Limite înainte de utilizarea reală
 
-MVP-ul folosește un singur worker și limitare locală a încercărilor de login (10/minut/username). Pentru mai mulți workeri folosește un limiter comun. Nu include recuperare parole prin e-mail, notificări push, WebSocket, firmware sau LoRa. Nu oferă editarea username-ului/rolului după creare; Admin modifică numele, parola și starea activă, iar identitatea rămâne stabilă. Nu șterge fizic utilizatori sau tomberoane pentru a păstra relațiile istorice.
+MVP-ul folosește un singur worker și limitare locală a încercărilor de login (10/minut/username). Pentru mai mulți workeri folosește un limiter comun. Nu include recuperare parole prin e-mail, notificări push, WebSocket sau firmware ESP32. Receptorul LoRa și clasificarea sunt în directorul `lora/`; necesită calibrare și testare fizică. Nu oferă editarea username-ului/rolului după creare; Admin modifică numele, parola și starea activă, iar identitatea rămâne stabilă. Nu șterge fizic utilizatori sau tomberoane pentru a păstra relațiile istorice.
 
 Referințe tehnice: [Compose Compiler](https://developer.android.com/develop/ui/compose/compiler), [Android Keystore](https://developer.android.com/privacy-and-security/keystore), [Maps Compose](https://github.com/googlemaps/android-maps-compose), [FastAPI password hashing](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/).

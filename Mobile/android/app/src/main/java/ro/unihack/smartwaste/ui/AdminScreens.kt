@@ -12,6 +12,7 @@ import ro.unihack.smartwaste.viewmodel.*
 @Composable fun UsersScreen(state: AppState, vm: WasteViewModel, role: String) {
     var creating by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<User?>(null) }
+    var hqEditing by remember { mutableStateOf<User?>(null) }
     var assigning by remember { mutableStateOf<User?>(null) }
     var selectedBins by remember { mutableStateOf<List<String>>(emptyList()) }
     Page {
@@ -26,6 +27,7 @@ import ro.unihack.smartwaste.viewmodel.*
                     Text("${user.username} • ${if (user.active) "Activ" else "Dezactivat"}")
                     Row {
                         TextButton(onClick = { editing = user }, enabled = !state.busy) { Text("Editează") }
+                        if (role == "Company") TextButton(onClick = { hqEditing = user }) { Text("HQ") }
                         if (role == "Resident" && user.active) TextButton(onClick = {
                             vm.assignments(user.id) { selectedBins = it; assigning = user }
                         }, enabled = !state.busy) { Text("Asignează tomberoane") }
@@ -34,6 +36,7 @@ import ro.unihack.smartwaste.viewmodel.*
             }
         }
     }
+    hqEditing?.let { HQEditor(it, state, vm) { hqEditing = null } }
     if (creating || editing != null) UserEditor(editing, role, state, vm) { creating = false; editing = null }
     assigning?.let { user ->
         FormDialog("Tomberoane: ${user.username}", state.busy, state.error, dismiss = { assigning = null },

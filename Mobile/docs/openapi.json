@@ -837,6 +837,108 @@
           }
         }
       }
+    },
+    "/iot/readings": {
+      "post": {
+        "tags": [
+          "IoT"
+        ],
+        "summary": "Ingest",
+        "operationId": "ingest_iot_readings_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoRaReading"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/iot/ultrasonic-readings": {
+      "post": {
+        "tags": [
+          "IoT"
+        ],
+        "summary": "Ingest",
+        "operationId": "ingest_iot_ultrasonic_readings_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UltrasonicReading"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1000,6 +1102,55 @@
         ],
         "title": "IncidentStatus"
       },
+      "LoRaReading": {
+        "properties": {
+          "bin_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "title": "Bin Id"
+          },
+          "latitude": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude"
+          },
+          "fill_level": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Fill Level"
+          },
+          "battery": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Battery"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bin_id",
+          "latitude",
+          "longitude",
+          "fill_level"
+        ],
+        "title": "LoRaReading"
+      },
       "Login": {
         "properties": {
           "username": {
@@ -1076,6 +1227,66 @@
           "fill_level"
         ],
         "title": "Reading"
+      },
+      "UltrasonicReading": {
+        "properties": {
+          "bin_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "title": "Bin Id"
+          },
+          "latitude": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude"
+          },
+          "distance_mid_cm": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Distance Mid Cm"
+          },
+          "distance_full_cm": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Distance Full Cm"
+          },
+          "distance_top_cm": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Distance Top Cm"
+          },
+          "battery": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Battery"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bin_id",
+          "latitude",
+          "longitude",
+          "distance_mid_cm",
+          "distance_full_cm",
+          "distance_top_cm"
+        ],
+        "title": "UltrasonicReading"
       },
       "UserCreate": {
         "properties": {

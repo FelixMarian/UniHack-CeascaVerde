@@ -1,0 +1,19 @@
+[Unit]
+Description=SmartWaste incident proofs (Solana Devnet)
+Wants=network-online.target
+After=network-online.target smartwaste.service
+
+[Service]
+Type=simple
+User=djoldskull
+WorkingDirectory=/home/djoldskull/smartwaste/backend
+EnvironmentFile=/home/djoldskull/smartwaste/.env
+Environment=SMARTWASTE_SOLANA_KEYPAIR=/home/djoldskull/.config/smartwaste/solana-devnet.json
+ExecStart=/home/djoldskull/smartwaste/.venv-mobile/bin/python -u -m smartwaste.solana_worker --watch
+Restart=on-failure
+RestartSec=15
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

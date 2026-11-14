@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from . import schemas as S
 from .models import User, Bin, Assignment, Incident, Session, now
 from .security import db, current_user, admin, passwords, dummy_hash, public_user, issue, revoke, digest, bearer
-from .services import visible_bins, owned_bin, company, bin_json
+from .services import visible_bins, owned_bin, company, bin_json, latest_categories
 
 router = APIRouter(prefix='/api/v1')
 
@@ -55,13 +55,14 @@ def change_password(body: S.PasswordChange, user=Depends(current_user), session=
 @router.get('/bins', tags=['Bins'])
 def bins(request: Request, user=Depends(current_user), session=Depends(db)):
     rows = session.scalars(visible_bins(session, user)).all()
-    measurements = request.app.state.sw_legacy.readings() if rows else {}
-    return [bin_json(b, measurements) for b in rows]
+    categories = latest_categories(session, [b.bin_id for b in rows])
+    measurements = request.app.state.sw_legacy.readings() if any(b.bin_id not in categories for b in rows) else {}
+    return [bin_json(b, measurements, categories.get(b.bin_id)) for b in rows]
 
 
 @router.post('/bins/{bin_id}/collections', tags=['Bins'])
 def collect(bin_id: str, request: Request, user=Depends(current_user), session=Depends(db)):
-    if user.role not in ('Company', 'Admin'):
+    if user.role != 'Company':
         raise HTTPException(403, 'Doar compania responsabilă poate confirma colectarea.')
     owned_bin(session, user, bin_id)
     # No automatic retries: the legacy API has no idempotency key.
@@ -85,13 +86,16 @@ def create_incident(body: S.IncidentCreate, user=Depends(current_user), session=
     owned_bin(session, user, body.bin_id)
     incident = Incident(**body.model_dump(), user_id=user.id)
     session.add(incident)
+    session.flush()
+    from .proofs import prepare
+    prepare(incident)
     commit(session)
     return incident
 
 
 @router.patch('/incidents/{incident_id}', tags=['Incidents'])
 def update_incident(incident_id: int, body: S.IncidentStatus, user=Depends(current_user), session=Depends(db)):
-    if user.role not in ('Company', 'Admin'):
+    if user.role != 'Company':
         raise HTTPException(403, 'Nu poți modifica statusul sesizării.')
     incident = session.get(Incident, incident_id)
     if not incident:

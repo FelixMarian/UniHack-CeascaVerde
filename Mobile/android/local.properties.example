@@ -1,4 +1,4 @@
 # Android Studio writes sdk.dir for your machine.
-API_BASE_URL=http://10.253.97.231:8000/
+API_BASE_URL=http://10.247.174.231:8000/
 # Enable Maps SDK for Android and restrict this key to application ID + signing SHA-1.
 MAPS_API_KEY=

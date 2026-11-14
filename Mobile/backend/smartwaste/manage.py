@@ -23,9 +23,10 @@ def migrate(engine):
     # Add application metadata to bins; never alter measurements or collections.
     with engine.begin() as conn:
         if engine.dialect.name == 'postgresql':
-            sql = (Path(__file__).parent.parent / 'migrations' / '001_mobile.sql').read_text(encoding='utf-8')
-            # SQL file also works with psql; here SQLAlchemy owns the outer transaction.
-            conn.exec_driver_sql(sql.replace('\nBEGIN;', '').replace('\nCOMMIT;', ''))
+            for migration in ('001_mobile.sql', '002_ultrasonic.sql', '003_company_proofs.sql'):
+                sql = (Path(__file__).parent.parent / 'migrations' / migration).read_text(encoding='utf-8')
+                # SQLAlchemy owns the outer transaction across both additive migrations.
+                conn.exec_driver_sql(sql.replace('\nBEGIN;', '').replace('\nCOMMIT;', ''))
         else:
             Base.metadata.create_all(conn)  # SQLite is exclusively a test fixture.
 
@@ -61,11 +62,23 @@ def seed(engine):
         # Deliberately no measurements, no collections, and no changes to BIN_001.
 
 
+def load_environment(env_file=None):
+    # Do not search from the downloaded package or depend on the current directory.
+    path = Path(env_file) if env_file is not None else Path(__file__).resolve().parents[2] / '.env'
+    load_dotenv(path, override=env_file is not None)
+
+
 def main():
-    load_dotenv()
     parser = argparse.ArgumentParser()
     parser.add_argument('command', choices=['inspect', 'migrate', 'seed'])
+    parser.add_argument('--env-file', type=Path, help='Explicit server .env path for package installation')
     args = parser.parse_args()
+    if args.env_file is not None and not args.env_file.is_file():
+        raise SystemExit('The specified server .env file does not exist.')
+    load_environment(args.env_file)
+    import os
+    if not os.environ.get('TIGER_DATABASE_URL'):
+        raise SystemExit('TIGER_DATABASE_URL is missing. Pass --env-file /home/djoldskull/smartwaste/.env')
     engine = make_engine()
     if args.command == 'inspect':
         print(json.dumps(inspect_schema(engine), indent=2, default=str))

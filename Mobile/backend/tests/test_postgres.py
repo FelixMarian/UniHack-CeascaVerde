@@ -70,6 +70,17 @@ def test_postgres_original_backend_and_mobile_end_to_end(monkeypatch):
             incident = client.post('/api/v1/incidents', headers=resident, json={
                 'bin_id':'BIN_001','category':'damaged','comment':'PostgreSQL integration test'})
             assert incident.status_code == 201, incident.text
+            proof = client.post(f"/api/v1/incidents/{incident.json()['id']}/proof", headers=resident)
+            assert proof.status_code == 200 and proof.json()['status'] == 'prepared'
+            assert len(proof.json()['sha256']) == 64
+            assert client.put(f"/api/v1/companies/{ids['company1']}/hq", headers=company,
+                              json={'latitude': 45.7, 'longitude': 21.1}).status_code == 200
+            route = client.post('/api/v1/company/route', headers=company)
+            assert route.status_code == 200 and route.json()['stops'][0]['bin_id'] == 'BIN_001'
+            assert client.patch('/api/v1/bins/BIN_001/damage', headers=company, json={'damaged': True}).status_code == 200
+            assert client.get('/api/v1/bins', headers=resident).json()[0]['fill_category'] == 4
+            assert client.post('/api/v1/company/route', headers=company).json()['stops'] == []
+            assert client.patch('/api/v1/bins/BIN_001/damage', headers=company, json={'damaged': False}).status_code == 200
             assert client.patch('/api/v1/incidents/' + str(incident.json()['id']), headers=company,
                                 json={'status':'resolved'}).status_code == 200
             assert client.post('/api/v1/bins/BIN_001/collections', headers=company).status_code == 200

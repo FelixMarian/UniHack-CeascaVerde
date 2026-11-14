@@ -42,7 +42,7 @@ def admin(user=Depends(current_user)):
 
 
 def public_user(user):
-    return {k: getattr(user, k) for k in ('id', 'username', 'role', 'display_name', 'active', 'demo')}
+    return {k: getattr(user, k) for k in ('id', 'username', 'role', 'display_name', 'active', 'demo', 'hq_latitude', 'hq_longitude')}
 
 
 def revoke(session, user_id):

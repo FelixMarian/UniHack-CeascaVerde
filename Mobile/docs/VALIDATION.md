@@ -1,5 +1,11 @@
 # Validare — 13 noiembrie 2026
 
+## Update ulterior: clasificare cu trei ultrasonici
+
+51 teste backend/parser trecute, inclusiv migrare aditivă și tranzacții pe PostgreSQL local; 5 teste Android trecute, APK 1.1.0 compilat, Android Lint 0 erori / 9 avertismente. Testele acoperă categorii 1/2/3, contradicții, praguri necalibrate, coordonate, restart, cereri simultane și păstrarea procentelor anterioare. Raportul specific și instrucțiunile sunt în pachetul `SmartWaste-Ultrasonic-update.zip` și `lora/ULTRASONIC_SETUP.md`.
+
+Accesul SSH la Pi a expirat; acest update nu a fost instalat acolo. Pragurile au fost confirmate de utilizator: laterali 5 cm, validare de sus 10 cm pentru Mediu și 5 cm pentru Plin; sunt configurate în fișierul .h. Nu s-a efectuat test fizic LoRa sau calibrare. Dovezile de emulator din secțiunile următoare aparțin versiunii anterioare cu procente, nu sunt o validare fizică a acestei clasificări.
+
 ## Rezultat și distincția dintre medii
 
 Codul Android și extensia backend sunt implementate și au fost verificate împreună pe **emulator Android → FastAPI local → PostgreSQL local**. Nu sunt doar mockup-uri. Nu am instalat extensia pe Raspberry Pi și nu am modificat Tiger Cloud. Acceptarea completă pe infrastructura reală rămâne condiționată de instalare, configurarea Maps și testarea pe telefon.

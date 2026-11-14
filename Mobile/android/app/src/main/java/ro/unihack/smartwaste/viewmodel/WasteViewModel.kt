@@ -17,7 +17,8 @@ import java.io.IOException
 
 data class AppState(val restoring: Boolean = true, val busy: Boolean = false, val user: User? = null,
     val bins: List<Bin> = emptyList(), val incidents: List<Incident> = emptyList(), val users: List<User> = emptyList(),
-    val error: String? = null, val message: String? = null)
+    val error: String? = null, val message: String? = null,
+    val route: CollectionRoute? = null, val proofs: Map<Int, IncidentProof> = emptyMap())
 
 class WasteViewModel(private val repository: WasteRepository) : ViewModel() {
     private val mutable = MutableStateFlow(AppState())
@@ -50,7 +51,9 @@ class WasteViewModel(private val repository: WasteRepository) : ViewModel() {
     }
 
     private suspend fun load() {
-        val user = mutable.value.user ?: return
+        if (mutable.value.user == null) return
+        val user = repository.api.me()
+        mutable.update { it.copy(user = user, route = null, proofs = emptyMap()) }
         // Server validates active status and assignments on every request.
         mutable.update { it.copy(bins = emptyList(), incidents = emptyList(), users = emptyList()) }
         if (user.role == "Admin") {
@@ -95,6 +98,17 @@ class WasteViewModel(private val repository: WasteRepository) : ViewModel() {
         done()
         mutable.update { it.copy(message = "Modificarea a fost salvată.") }
         load()
+    }
+    fun damage(bin: Bin) = mutate({}) { repository.api.damage(bin.bin_id, DamageInput(bin.fill_category != 4)) }
+    fun hq(id: Int, input: HQInput, done: () -> Unit) = mutate(done) { repository.api.hq(id, input) }
+    fun generateRoute() = launch {
+        mutable.update { it.copy(route = null) }
+        val route = repository.api.route()
+        mutable.update { it.copy(route = route) }
+    }
+    fun proof(id: Int) = launch {
+        val proof = repository.api.proof(id)
+        mutable.update { it.copy(proofs = it.proofs + (id to proof)) }
     }
     fun report(input: IncidentInput, done: () -> Unit) = mutate(done) { repository.api.report(input) }
     fun status(id: Int, status: String) = mutate({}) { repository.api.status(id, StatusInput(status)) }

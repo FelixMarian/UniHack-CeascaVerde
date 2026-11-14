@@ -42,13 +42,16 @@ val statuses = linkedMapOf("open" to "Deschisă", "in_progress" to "În lucru", 
     var collecting by remember { mutableStateOf<Bin?>(null) }
     val admin = state.user?.role == "Admin"
     Page {
-        Heading(if (admin) "Tomberoane" else "Tomberoanele tale", "${state.bins.size} înregistrate • ${state.bins.count { (it.fill_level ?: 0) >= 80 }} necesită colectare")
+        Heading(if (admin) "Tomberoane" else "Tomberoanele tale", "${state.bins.size} înregistrate • ${state.bins.count { binState(it) == FillState.FULL }} necesită colectare")
         if (admin) Button(onClick = { creating = true }, enabled = !state.busy) { Text("Înregistrează tomberon") }
         if (state.bins.isEmpty() && !state.busy) Empty("Nu există tomberoane disponibile. Asignările sunt gestionate de administrator.")
         state.bins.forEach { bin ->
             BinCard(bin) {
                 if (admin) TextButton(onClick = { editing = bin }, enabled = !state.busy) { Text("Editează / Companie") }
-                if (state.user?.role in listOf("Company", "Admin")) OutlinedButton(onClick = { collecting = bin }, enabled = !state.busy) { Text("Confirmă colectarea") }
+                if (state.user?.role == "Company") TextButton(onClick = { vm.damage(bin) }, enabled = !state.busy) {
+                    Text(if (bin.fill_category == 4) "Marchează reparat" else "Marchează deteriorat")
+                }
+                if (state.user?.role == "Company") OutlinedButton(onClick = { collecting = bin }, enabled = !state.busy) { Text("Confirmă colectarea") }
             }
         }
     }
@@ -88,7 +91,8 @@ val statuses = linkedMapOf("open" to "Deschisă", "in_progress" to "În lucru", 
                     Text("#${incident.id} • ${incident.bin_id} • ${dateLabel(incident.created_at)}", style = MaterialTheme.typography.labelMedium)
                     Text(incident.comment)
                     Text(statuses[incident.status] ?: incident.status, color = MaterialTheme.colorScheme.primary)
-                    if (state.user?.role != "Resident") {
+                    ProofPanel(incident.id, state, vm)
+                    if (state.user?.role == "Company") {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (incident.status != "in_progress") TextButton(onClick = { vm.status(incident.id, "in_progress") }, enabled = !state.busy) { Text("În lucru") }
                             if (incident.status != "resolved") TextButton(onClick = { vm.status(incident.id, "resolved") }, enabled = !state.busy) { Text("Rezolvă") }

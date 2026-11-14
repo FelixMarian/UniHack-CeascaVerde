@@ -11,6 +11,35 @@ import ro.unihack.smartwaste.model.*
 import ro.unihack.smartwaste.navigation.routesFor
 
 class ContractTest {
+    @Test fun companyAndProofContracts() = runTest {
+        MockWebServer().use { server ->
+            val store = object : TokenStore { override var token: String? = "session-token" }
+            val service = api(server.url("/").toString(), store)
+            server.enqueue(MockResponse().setBody("""{"hq_latitude":45.0,"hq_longitude":21.0,"stops":[],"straight_line_meters":0,"skipped_bin_ids":["BIN_001"]}"""))
+            assertEquals(listOf("BIN_001"), service.route().skipped_bin_ids)
+            assertEquals("POST", server.takeRequest().method)
+            server.enqueue(MockResponse().setBody("""{"sha256":"abc","signature":null,"network":"devnet","status":"prepared","explorer_url":null}"""))
+            assertEquals("prepared", service.proof(5).status)
+            assertEquals("/api/v1/incidents/5/proof", server.takeRequest().path)
+            server.enqueue(MockResponse().setBody("""{"bin_id":"BIN_001","is_damaged":true}"""))
+            service.damage("BIN_001", DamageInput(true))
+            val request = server.takeRequest()
+            assertEquals("PATCH", request.method)
+            assertEquals("{\"damaged\":true}", request.body.readUtf8())
+        }
+    }
+    @Test fun categoriesAreNotPercentages() {
+        val bin = Bin("BIN_001", "Test", null, null, null, 85, null)
+        assertEquals("85%", binLevelLabel(bin))
+        assertEquals("Gol", binLevelLabel(bin.copy(fill_category = 1, fill_level = null)))
+        assertEquals(FillState.NORMAL, binState(bin.copy(fill_category = 1)))
+        assertEquals("Mediu", binLevelLabel(bin.copy(fill_category = 2)))
+        assertEquals(FillState.WARNING, binState(bin.copy(fill_category = 2)))
+        assertEquals("Plin", binLevelLabel(bin.copy(fill_category = 3)))
+        assertEquals(FillState.FULL, binState(bin.copy(fill_category = 3, fill_level = null)))
+        assertEquals("Deteriorat", binLevelLabel(bin.copy(fill_category = 4)))
+        assertEquals(FillState.DAMAGED, binState(bin.copy(fill_category = 4, fill_level = 0)))
+    }
     @Test fun fillThresholdsAndUnknown() {
         assertEquals(FillState.UNKNOWN, fillState(null))
         assertEquals(FillState.NORMAL, fillState(0))

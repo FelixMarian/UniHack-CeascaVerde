@@ -9,7 +9,7 @@ val local = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 val apiUrl = providers.gradleProperty("API_BASE_URL").orNull
-    ?: local.getProperty("API_BASE_URL", "http://10.253.97.231:8000/")
+    ?: local.getProperty("API_BASE_URL", "http://10.247.174.231:8000/")
 require(apiUrl.endsWith("/")) { "API_BASE_URL must end with /" }
 require(apiUrl.matches(Regex("https?://[A-Za-z0-9.\\-:\\[\\]]+/"))) { "API_BASE_URL must be an HTTP(S) origin" }
 val mapsKey = local.getProperty("MAPS_API_KEY", "")
@@ -21,8 +21,8 @@ android {
         applicationId = "ro.unihack.smartwaste"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 4
+        versionName = "1.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "API_BASE_URL", "\"$apiUrl\"")
         buildConfigField("boolean", "MAPS_CONFIGURED", mapsKey.isNotBlank().toString())

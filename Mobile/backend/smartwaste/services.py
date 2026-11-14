@@ -1,6 +1,6 @@
 from fastapi import HTTPException
-from sqlalchemy import select
-from .models import Bin, Assignment, User
+from sqlalchemy import select, func
+from .models import Bin, Assignment, User, UltrasonicMeasurement
 
 
 def visible_bins(session, user):
@@ -26,8 +26,22 @@ def company(session, company_id):
             raise HTTPException(422, 'Selectează o companie activă.')
 
 
-def bin_json(bin, measurements):
+def latest_categories(session, bin_ids):
+    if not bin_ids:
+        return {}
+    ranked = select(UltrasonicMeasurement.id,
+        func.row_number().over(partition_by=UltrasonicMeasurement.bin_id,
+            order_by=(UltrasonicMeasurement.recorded_at.desc(), UltrasonicMeasurement.id.desc())).label('rank'))\
+        .where(UltrasonicMeasurement.bin_id.in_(bin_ids)).subquery()
+    rows = session.scalars(select(UltrasonicMeasurement).join(ranked, ranked.c.id == UltrasonicMeasurement.id)
+        .where(ranked.c.rank == 1)).all()
+    return {row.bin_id: row for row in rows}
+
+
+def bin_json(bin, measurements, ultrasonic=None):
     reading = measurements.get(bin.bin_id, {})
     return {**{k: getattr(bin, k) for k in ('bin_id', 'name', 'latitude', 'longitude', 'company_id', 'demo')},
-            'fill_level': reading.get('fill_level'), 'recorded_at': reading.get('recorded_at'),
-            'battery': reading.get('battery')}
+            'fill_level': None if ultrasonic else reading.get('fill_level'),
+            'fill_category': 4 if bin.is_damaged else ultrasonic.fill_category if ultrasonic else None,
+            'recorded_at': ultrasonic.recorded_at if ultrasonic else reading.get('recorded_at'),
+            'battery': ultrasonic.battery if ultrasonic else reading.get('battery')}
