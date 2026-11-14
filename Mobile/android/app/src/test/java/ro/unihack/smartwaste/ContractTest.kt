@@ -11,6 +11,15 @@ import ro.unihack.smartwaste.model.*
 import ro.unihack.smartwaste.navigation.routesFor
 
 class ContractTest {
+    @Test fun navigationKeepsAllCheckpointsAcrossSegments() {
+        val points = (0..10).map { 45.0 + it / 100.0 to 21.0 + it / 100.0 }
+        val first = ro.unihack.smartwaste.ui.mapsSegmentUrl(points, 0)
+        assertTrue(first.contains("destination=45.03,21.03"))
+        assertTrue(first.contains("waypoints=45.0,21.0%7C45.01,21.01%7C45.02,21.02"))
+        val last = ro.unihack.smartwaste.ui.mapsSegmentUrl(points, 8)
+        assertTrue(last.contains("destination=45.1,21.1"))
+        assertFalse(last.contains("45.07"))
+    }
     @Test fun companyAndProofContracts() = runTest {
         MockWebServer().use { server ->
             val store = object : TokenStore { override var token: String? = "session-token" }

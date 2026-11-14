@@ -14,7 +14,7 @@ import ro.unihack.smartwaste.viewmodel.WasteViewModel
 
 fun routesFor(role: String): List<Pair<String, String>> = when (role) {
     "Resident" -> listOf("dashboard" to "Tomberoane", "report" to "Sesizare", "incidents" to "Sesizările mele", "profile" to "Profil")
-    "Company" -> listOf("dashboard" to "Tomberoane", "map" to "Hartă", "incidents" to "Incidente", "profile" to "Profil")
+    "Company" -> listOf("dashboard" to "Tomberoane", "map" to "Hartă", "statistics" to "Statistici", "incidents" to "Incidente", "profile" to "Profil")
     "Admin" -> listOf("users" to "Locatari", "companies" to "Companii", "dashboard" to "Tomberoane", "incidents" to "Incidente", "profile" to "Profil")
     else -> emptyList()
 }
@@ -52,6 +52,7 @@ fun routesFor(role: String): List<Pair<String, String>> = when (role) {
                         "report" -> ReportScreen(state, vm) { nav.navigate("incidents") { popUpTo("dashboard") } }
                         "incidents" -> IncidentsScreen(state, vm)
                         "map" -> MapScreen(state, vm)
+                        "statistics" -> StatisticsScreen(state, vm)
                         "users" -> UsersScreen(state, vm, "Resident")
                         "companies" -> UsersScreen(state, vm, "Company")
                         "profile" -> ProfileScreen(state, vm)

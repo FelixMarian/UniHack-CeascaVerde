@@ -4,7 +4,7 @@ import json
 import secrets
 from datetime import timezone
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Request, Depends, HTTPException
 from sqlalchemy import select
 from .models import Incident
 from .security import current_user, db
@@ -13,6 +13,38 @@ from .services import owned_bin
 RPC = 'https://api.devnet.solana.com'
 MEMO_PROGRAM = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'
 router = APIRouter(prefix='/api/v1')
+
+
+class SolanaRPCError(ValueError):
+    def __init__(self, code):
+        self.code = code
+        super().__init__(code)
+
+
+def accessible(session, user, incident_id):
+    item = session.get(Incident, incident_id)
+    if not item or (user.role == 'Resident' and item.user_id != user.id):
+        raise HTTPException(404, 'Sesizare inexistentă.')
+    if user.role == 'Company':
+        owned_bin(session, user, item.bin_id)
+    return item
+
+
+@router.get('/incidents/{incident_id}/blockchain')
+def blockchain_status(incident_id: int, user=Depends(current_user), session=Depends(db)):
+    from .automatic_proofs import result
+    return result(accessible(session, user, incident_id))
+
+
+@router.post('/incidents/{incident_id}/blockchain/retry', status_code=202)
+def retry(incident_id: int, request: Request, background: BackgroundTasks, user=Depends(current_user), session=Depends(db)):
+    from .automatic_proofs import process, result
+    item = accessible(session, user, incident_id)
+    if item.blockchain_status != 'verified':
+        item.blockchain_status, item.blockchain_error = 'pending', None
+        session.commit()
+        background.add_task(process, request.app.state.sw_sessions, incident_id)
+    return result(item)
 
 
 def content_hash(item):
@@ -43,7 +75,12 @@ def rpc(method, params):
         response.raise_for_status()
         body = response.json()
     if 'error' in body or 'result' not in body:
-        raise ValueError('Solana RPC error')
+        error = json.dumps(body.get('error', {})).lower()
+        if 'insufficient' in error or 'attempt to debit' in error:
+            raise SolanaRPCError('SOLANA_INSUFFICIENT_FUNDS')
+        if 'blockhash not found' in error or 'block height exceeded' in error:
+            raise SolanaRPCError('SOLANA_TRANSACTION_EXPIRED')
+        raise SolanaRPCError('SOLANA_PUBLICATION_FAILED')
     return body['result']
 
 

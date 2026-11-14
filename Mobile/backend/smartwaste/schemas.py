@@ -49,8 +49,9 @@ class Assignments(Input):
 
 
 class IncidentCreate(Input):
+    request_id: str | None = Field(default=None, pattern=r'^[a-fA-F0-9-]{36}$')
     bin_id: str
-    category: Literal['damaged', 'overflow', 'missed_collection', 'other']
+    category: Literal['damaged', 'stolen', 'overflow', 'missed_collection', 'other']
     comment: str = Field(min_length=1, max_length=2000)
 
 

@@ -42,6 +42,6 @@ def bin_json(bin, measurements, ultrasonic=None):
     reading = measurements.get(bin.bin_id, {})
     return {**{k: getattr(bin, k) for k in ('bin_id', 'name', 'latitude', 'longitude', 'company_id', 'demo')},
             'fill_level': None if ultrasonic else reading.get('fill_level'),
-            'fill_category': 4 if bin.is_damaged else ultrasonic.fill_category if ultrasonic else None,
+            'fill_category': 5 if bin.is_stolen else 4 if bin.is_damaged else ultrasonic.fill_category if ultrasonic else None,
             'recorded_at': ultrasonic.recorded_at if ultrasonic else reading.get('recorded_at'),
             'battery': ultrasonic.battery if ultrasonic else reading.get('battery')}

@@ -14,6 +14,7 @@ from .iot import router as iot_router
 from .ultrasonic import router as ultrasonic_router
 from .company import router as company_router
 from .proofs import router as proofs_router
+from .statistics import router as statistics_router
 
 
 class LoginLimiter:
@@ -52,6 +53,7 @@ def install(app: FastAPI, *, engine=None, legacy=None, device_key=None):
     app.include_router(ultrasonic_router)
     app.include_router(company_router)
     app.include_router(proofs_router)
+    app.include_router(statistics_router)
 
     @app.exception_handler(SQLAlchemyError)
     async def database_error(request, exc):

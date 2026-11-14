@@ -6,7 +6,6 @@ from pathlib import Path
 
 import spidev
 import RPi.GPIO as GPIO
-import requests
 from dotenv import load_dotenv
 
 
@@ -282,6 +281,7 @@ class LoRaReceiver:
 
 
 from packet import validate_ultrasonic as validate_reading
+from outbox import Outbox
 
 
 def main():
@@ -301,8 +301,15 @@ def main():
 
     radio = LoRaReceiver()
 
+    outbox = None
     try:
+        if not args.no_api:
+            queue = Path(__file__).resolve().parents[1] / "state" / "lora-outbox.sqlite3"
+            queue.parent.mkdir(mode=0o700, exist_ok=True)
+            outbox = Outbox(queue, API_URL, API_KEY)
         while True:
+            if outbox and not outbox.worker.is_alive():
+                raise RuntimeError("LoRa upload worker stopped")
             result = radio.receive_packet()
 
             if result is None:
@@ -336,46 +343,17 @@ def main():
                     print("TEST MODE: No database upload")
                     continue
 
-                response = requests.post(
-                    API_URL,
-                    json=reading,
-                    headers={
-                        "x-api-key": API_KEY
-                    },
-                    timeout=5
-                )
+                outbox.enqueue(reading)
 
-                if not response.ok:
-                    try:
-                        print("API rejected reading:", response.status_code, response.json().get("detail"), flush=True)
-                    except ValueError:
-                        print("API error:", response.status_code, flush=True)
-                response.raise_for_status()
-
-                result = response.json()
-                if not isinstance(result, dict):
-                    raise ValueError("Unexpected IoT API response")
-                print("CATEGORY:", result.get("fill_category"), result.get("category_label"), flush=True)
-                if result.get("changed") is True:
-                    print("Database updated:",
-                          "measurement=", result.get("measurement_saved"),
-                          "coordinates=", result.get("coordinates_updated"), flush=True)
-                elif result.get("changed") is False:
-                    print("Unchanged: no database write", flush=True)
-                else:
-                    raise ValueError("Unexpected IoT API response")
-
-            except (
-                UnicodeError,
-                ValueError,
-                requests.RequestException
-            ) as error:
+            except (UnicodeError, ValueError) as error:
                 print("Packet error:", error)
 
     except KeyboardInterrupt:
         print("\nStopping LoRa receiver...")
 
     finally:
+        if outbox:
+            outbox.close()
         radio.close()
 
 

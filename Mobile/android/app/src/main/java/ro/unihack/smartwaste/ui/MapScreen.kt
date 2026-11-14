@@ -1,137 +1,158 @@
 package ro.unihack.smartwaste.ui
 
-import android.Manifest
-import android.content.Context
-import android.content.pm.PackageManager
-import android.location.Location
-import android.location.LocationManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
+import android.net.Uri
+import android.graphics.Color
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.core.location.LocationManagerCompat
-import android.os.CancellationSignal
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.LatLngBounds
-import com.google.maps.android.compose.*
-import kotlinx.coroutines.delay
-import ro.unihack.smartwaste.BuildConfig
+import androidx.compose.ui.viewinterop.AndroidView
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.tilesource.XYTileSource
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.util.BoundingBox
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polyline
 import ro.unihack.smartwaste.model.*
 import ro.unihack.smartwaste.viewmodel.*
 
-@Composable fun MapScreen(state: AppState, vm: WasteViewModel) {
-    val context = LocalContext.current
-    var location by remember { mutableStateOf<Location?>(null) }
-    var gpsMessage by remember { mutableStateOf("Locația telefonului este folosită doar în acest ecran.") }
-    var locating by remember { mutableStateOf(false) }
-    var cancellation by remember { mutableStateOf<CancellationSignal?>(null) }
-    var editingHQ by remember { mutableStateOf(false) }
-    fun locate() {
-        val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        if (!fine && !coarse) { gpsMessage = "Permite accesul la locație pentru a vedea poziția telefonului."; return }
-        val provider = listOfNotNull(if (fine) LocationManager.GPS_PROVIDER else null, LocationManager.NETWORK_PROVIDER)
-            .firstOrNull { manager.isProviderEnabled(it) }
-        if (provider == null) { gpsMessage = "Activează localizarea telefonului. Pentru GPS permite locația precisă."; return }
-        cancellation?.cancel()
-        val signal = CancellationSignal()
-        cancellation = signal
-        locating = true
-        location = null
-        gpsMessage = "Se caută poziția telefonului…"
-        try {
-            LocationManagerCompat.getCurrentLocation(manager, provider, signal, ContextCompat.getMainExecutor(context)) { result ->
-                if (!signal.isCanceled) {
-                    locating = false
-                    location = result
-                    gpsMessage = result?.let { "Poziție: ${it.latitude}, ${it.longitude} • precizie aproximativă ${it.accuracy.toInt()} m" }
-                        ?: "Poziția nu este disponibilă. Reîncearcă lângă o fereastră sau în exterior."
-                }
-            }
-        } catch (_: SecurityException) { locating = false; gpsMessage = "Accesul la locație a fost retras." }
-    }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-        if (permissions.values.any { it }) locate()
-        else gpsMessage = "Locația nu a fost permisă. Poți continua fără GPS sau activa permisiunea în setările aplicației."
-    }
-    DisposableEffect(Unit) { onDispose { cancellation?.cancel() } }
-    LaunchedEffect(locating) {
-        if (locating) {
-            delay(20000)
-            cancellation?.cancel()
-            locating = false
-            gpsMessage = "Localizarea a durat prea mult. Verifică GPS-ul și reîncearcă."
-        }
-    }
-    val user = state.user ?: return
-    val located = state.bins.filter { it.latitude != null && it.longitude != null }
-    val route = state.route
-    val hq = if (user.hq_latitude != null && user.hq_longitude != null) LatLng(user.hq_latitude, user.hq_longitude) else null
-    Page {
-        Heading("Hartă și colectare", "Planifică opririle de la sediul companiei (HQ).")
-        Text(if (hq == null) "HQ neconfigurat" else "HQ: ${hq.latitude}, ${hq.longitude}")
-        OutlinedButton(onClick = { editingHQ = true }, enabled = !state.busy) { Text("Configurează HQ") }
-        Button(onClick = {
-            permission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-        }, enabled = !locating) { Text(if (locating) "Se localizează…" else "Localizează-mă") }
-        Text(gpsMessage)
-        if (BuildConfig.MAPS_CONFIGURED) {
-            val camera = rememberCameraPositionState()
-            var loaded by remember { mutableStateOf(false) }
-            val points = located.map { LatLng(it.latitude!!, it.longitude!!) } + listOfNotNull(hq, location?.let { LatLng(it.latitude, it.longitude) })
-            LaunchedEffect(points, loaded) {
-                if (loaded && points.isNotEmpty()) {
-                    if (points.distinct().size == 1) camera.animate(CameraUpdateFactory.newLatLngZoom(points.first(), 15f))
-                    else camera.animate(CameraUpdateFactory.newLatLngBounds(LatLngBounds.builder().apply { points.forEach { include(it) } }.build(), 70))
-                }
-            }
-            GoogleMap(Modifier.fillMaxWidth().height(320.dp), cameraPositionState = camera, onMapLoaded = { loaded = true }) {
-                located.forEach { bin -> key(bin.bin_id, bin.latitude, bin.longitude) {
-                    Marker(rememberMarkerState(position = LatLng(bin.latitude!!, bin.longitude!!)), title = bin.name, snippet = binLevelLabel(bin))
-                } }
-                hq?.let { key(it) { Marker(rememberMarkerState(position = it), title = "HQ • sediul companiei") } }
-                location?.let { key(it.latitude, it.longitude) {
-                    Marker(rememberMarkerState(position = LatLng(it.latitude, it.longitude)), title = "Poziția telefonului")
-                } }
-                route?.takeIf { it.stops.isNotEmpty() }?.let {
-                    val start = LatLng(it.hq_latitude, it.hq_longitude)
-                    Polyline(points = listOf(start) + it.stops.map { bin -> LatLng(bin.latitude!!, bin.longitude!!) } + start)
-                }
-            }
-        } else Text("Harta Google va fi activată după configurarea cheii Maps. GPS-ul, sediul HQ și lista opririlor funcționează deja.")
-        Button(onClick = vm::generateRoute, enabled = !state.busy) { Text("Generare rută") }
-        Text("Se includ tomberoanele pline ale companiei. Cele deteriorate necesită reparație și sunt excluse. Ordinea este aproximativă, după distanța directă; nu reprezintă navigație pe străzi.")
-        route?.let {
-            Text("Plecare: HQ → ${it.stops.size} opriri → întoarcere la HQ")
-            if (it.stops.isEmpty()) Text("Niciun tomberon plin cu coordonate disponibile.")
-            it.stops.forEachIndexed { index, bin ->
-                Text("${index + 1}. ${bin.name} (${bin.bin_id}) • ${bin.latitude}, ${bin.longitude}")
-            }
-            Text("Distanță în linie dreaptă, cu întoarcere: ${it.straight_line_meters} m")
-            if (it.skipped_bin_ids.isNotEmpty()) Text("Omise: lipsesc coordonatele pentru ${it.skipped_bin_ids.joinToString()}.")
-        }
-    }
-    if (editingHQ) HQEditor(user, state, vm) { editingHQ = false }
+fun mapsSegmentUrl(points: List<Pair<Double, Double>>, offset: Int): String {
+    val part = points.drop(offset).take(4)
+    require(part.isNotEmpty())
+    fun coordinate(p: Pair<Double, Double>) = "${p.first},${p.second}"
+    return "https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate&destination=" +
+        coordinate(part.last()) + if (part.size > 1) "&waypoints=" + part.dropLast(1).joinToString("%7C") { coordinate(it) } else ""
 }
 
-@Composable fun HQEditor(user: User, state: AppState, vm: WasteViewModel, close: () -> Unit) {
-    var latitude by remember { mutableStateOf(user.hq_latitude?.toString() ?: "") }
-    var longitude by remember { mutableStateOf(user.hq_longitude?.toString() ?: "") }
-    val lat = latitude.trim().replace(',', '.').toDoubleOrNull()
-    val lon = longitude.trim().replace(',', '.').toDoubleOrNull()
-    val valid = (latitude.isBlank() && longitude.isBlank()) ||
-        (lat != null && lon != null && lat.isFinite() && lon.isFinite() && lat in -90.0..90.0 && lon in -180.0..180.0)
-    FormDialog("HQ: ${user.display_name}", state.busy, state.error, valid, close,
-        { vm.hq(user.id, HQInput(lat, lon), close) }) {
-        Text("Coordonatele sediului de unde pleacă agenții. Lasă ambele câmpuri goale pentru a șterge HQ.")
-        OutlinedTextField(latitude, { latitude = it }, label = { Text("Latitudine HQ") }, singleLine = true)
-        OutlinedTextField(longitude, { longitude = it }, label = { Text("Longitudine HQ") }, singleLine = true)
+@Composable fun WasteMap(state: AppState) {
+    val context = LocalContext.current
+    val uri = LocalUriHandler.current
+    val map = remember {
+        Configuration.getInstance().apply {
+            userAgentValue = "ro.unihack.smartwaste/1.3.0 (Android hackathon demo)"
+            osmdroidBasePath = java.io.File(context.cacheDir, "osm")
+            osmdroidTileCache = java.io.File(context.cacheDir, "osm/tiles")
+        }
+        MapView(context).apply {
+            setTileSource(XYTileSource("OpenStreetMap", 0, 19, 256, ".png", arrayOf("https://tile.openstreetmap.org/"), "© OpenStreetMap contributors"))
+            setMultiTouchControls(true)
+            controller.setZoom(13.0)
+            controller.setCenter(GeoPoint(45.7489, 21.2087))
+        }
+    }
+    DisposableEffect(map) { map.onResume(); onDispose { map.onPause(); map.onDetach() } }
+    val user = state.user
+    val route = state.route
+    LaunchedEffect(state.bins, user?.hq_latitude, user?.hq_longitude, route?.id) {
+        map.overlays.clear()
+        val points = mutableListOf<GeoPoint>()
+        fun marker(point: GeoPoint, name: String, detail: String, color: Int) {
+            points.add(point)
+            map.overlays.add(Marker(map).apply {
+                position = point; title = name; snippet = detail
+                icon = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(color); setStroke(3, Color.WHITE)
+                    val size = (18 * context.resources.displayMetrics.density).toInt()
+                    setSize(size, size)
+                }
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+            })
+        }
+        state.bins.filter { it.latitude != null && it.longitude != null }.forEach {
+            val color = when (binState(it)) { FillState.NORMAL -> Color.rgb(35,130,65); FillState.WARNING -> Color.rgb(210,150,0); FillState.FULL -> Color.rgb(195,45,45); FillState.DAMAGED -> Color.rgb(130,60,170); else -> Color.GRAY }
+            marker(GeoPoint(it.latitude!!, it.longitude!!), it.name, "${it.bin_id} • ${binLevelLabel(it)}", color)
+        }
+        if (user?.hq_latitude != null && user.hq_longitude != null)
+            marker(GeoPoint(user.hq_latitude, user.hq_longitude), "HQ", "Punct de plecare și întoarcere", Color.BLUE)
+        route?.geometry?.takeIf { it.size > 1 }?.let { geometry ->
+            val line = geometry.map { GeoPoint(it[0], it[1]) }
+            points.addAll(line)
+            map.overlays.add(0, Polyline(map).apply { setPoints(line); outlinePaint.color = Color.rgb(30, 110, 65); outlinePaint.strokeWidth = 9f })
+        }
+        if (points.isNotEmpty()) map.post {
+            if (points.distinctBy { it.latitude to it.longitude }.size == 1) map.controller.setCenter(points.first())
+            else map.zoomToBoundingBox(BoundingBox.fromGeoPoints(points), false, 60)
+        }
+        map.invalidate()
+    }
+    AndroidView(factory = { map }, modifier = Modifier.fillMaxWidth().height(360.dp).clipToBounds())
+    TextButton(onClick = { uri.openUri("https://www.openstreetmap.org/copyright") }) { Text("© OpenStreetMap contributors") }
+    Text("Verde: gol • galben: mediu • roșu: plin • mov: deteriorat • albastru: HQ", style = MaterialTheme.typography.bodySmall)
+    Text("Harta necesită internet. Traseu: openrouteservice / © OpenStreetMap contributors.", style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable fun MapScreen(state: AppState, vm: WasteViewModel) {
+    val context = LocalContext.current
+    val user = state.user ?: return
+    var editingHQ by remember { mutableStateOf(false) }
+    var completing by remember { mutableStateOf(false) }
+    var consumption by rememberSaveable { mutableStateOf("20") }
+    val rate = consumption.replace(',', '.').toDoubleOrNull()
+    val route = state.route
+    var checkpoint by rememberSaveable(route?.id) { mutableIntStateOf(0) }
+    var lastSegmentSize by rememberSaveable(route?.id) { mutableIntStateOf(1) }
+    var navigationError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { vm.loadRoutes() }
+    fun open(url: String, packageName: String?) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            if (packageName != null) intent.setPackage(packageName)
+            try { context.startActivity(intent) }
+            catch (_: android.content.ActivityNotFoundException) { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+        } catch (_: Exception) { navigationError = "Nu există o aplicație care poate deschide navigarea. Instalează Google Maps sau Waze." }
+    }
+    Page {
+        Heading("Hartă și rută", "Plecare din HQ • colectarea tomberoanelor pline")
+        WasteMap(state)
+        Text(if (user.hq_latitude == null) "HQ neconfigurat" else "HQ: ${user.hq_latitude}, ${user.hq_longitude}")
+        OutlinedButton(onClick = { editingHQ = true }, enabled = !state.busy) { Text("Configurează HQ") }
+        OutlinedTextField(consumption, { consumption = it }, label = { Text("Consum estimat (litri / 100 km)") }, singleLine = true)
+        Button(onClick = { vm.generateRoute(rate!!) }, enabled = !state.busy && rate != null && rate.isFinite() && rate in 1.0..100.0) { Text("Generează ruta cu Gemini") }
+        Text("Gemini propune ordinea, iar openrouteservice furnizează distanțele și traseul pe drumuri. Se exclud tomberoanele deteriorate. Nu este garantat optimul global sau accesul unui camion.", style = MaterialTheme.typography.bodySmall)
+        if (state.routes.any { it.status != "completed" }) Choice("Rută salvată", state.routes.filter { it.status != "completed" }, route,
+            { "${it.id.take(8)} • ${it.stops.size} opriri • ${it.status}" }) { vm.selectRoute(it) }
+        route?.let { r ->
+            Text("${r.planner} • ${"%.2f".format(r.distance_meters/1000)} km • ${"%.0f".format(r.duration_seconds/60)} min de condus")
+            Text("Combustibil estimat: ${"%.2f".format(r.estimated_fuel_liters)} L • fără timpul de colectare")
+            Text("HQ → ${r.stops.size} opriri → HQ")
+            r.stops.forEachIndexed { index, bin -> Text("${index+1}. ${bin.name} (${bin.bin_id})") }
+            if (r.skipped_bin_ids.isNotEmpty()) Text("Fără coordonate, excluse: ${r.skipped_bin_ids.joinToString()}")
+            val points = r.stops.map { it.latitude!! to it.longitude!! } + (r.hq_latitude to r.hq_longitude)
+            if (r.status != "completed" && checkpoint < points.size) {
+                Text("Navigare de la poziția curentă din Maps/Waze. Planul pornește din HQ; mergi întâi la HQ dacă nu ești acolo.")
+                Button(onClick = { vm.startRoute(r) {
+                    lastSegmentSize = minOf(4, points.size-checkpoint)
+                    open(mapsSegmentUrl(points, checkpoint), "com.google.android.apps.maps")
+                } }, enabled = !state.busy) { Text("Începe navigarea în Google Maps") }
+                OutlinedButton(onClick = { vm.startRoute(r) {
+                    lastSegmentSize = 1
+                    val p = points[checkpoint]
+                    open("https://waze.com/ul?ll=${p.first},${p.second}&navigate=yes", "com.waze")
+                } }, enabled = !state.busy) { Text("Waze → următoarea oprire") }
+                Text("Google Maps: maximum 4 opriri pe segment. Waze: o oprire. După parcurgere revino aici; colectarea se confirmă separat în Tomberoane.", style = MaterialTheme.typography.bodySmall)
+                if (r.status == "started") OutlinedButton(onClick = { checkpoint = minOf(points.size, checkpoint+lastSegmentSize) }) { Text("Am parcurs segmentul → următorul") }
+            }
+            if (r.status == "started") Button(onClick = { completing = true }, enabled = !state.busy) { Text("Finalizează cursa / kilometraj") }
+            if (r.status == "completed") Text("Cursă finalizată")
+        }
+        navigationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    }
+    if (editingHQ) HQEditor(user, state, vm) { editingHQ = false }
+    if (completing && route != null) {
+        var kilometers by remember { mutableStateOf("") }
+        val km = kilometers.replace(',', '.').toDoubleOrNull()
+        FormDialog("Finalizează cursa", state.busy, state.error, km != null && km.isFinite() && km in 0.0..10000.0,
+            { completing = false }, { vm.finishRoute(route, km!!) { completing = false } }) {
+            Text("Introdu kilometrii efectiv parcurși, calculați din kilometrajul mașinii. Aplicația nu urmărește GPS-ul. Consumul rămâne o estimare.")
+            OutlinedTextField(kilometers, { kilometers = it }, label = { Text("Kilometri parcurși") }, singleLine = true)
+        }
     }
 }

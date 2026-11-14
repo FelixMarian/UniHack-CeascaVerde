@@ -28,7 +28,7 @@ class DamageInput(BaseModel):
 
 @router.put('/companies/{company_id}/hq')
 def headquarters(company_id: int, body: HQInput, user=Depends(current_user), session=Depends(db)):
-    if user.role != 'Admin' and not (user.role == 'Company' and user.id == company_id):
+    if user.role != 'Admin':
         raise HTTPException(403, 'Nu poți modifica sediul acestei companii.')
     account = session.get(User, company_id)
     if not account or account.role != 'Company':
@@ -67,6 +67,21 @@ def order_stops(origin, bins):
     if ordered:
         total += distance(point, origin)
     return ordered, round(total)
+
+
+class StolenInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    stolen: bool = Field(strict=True)
+
+
+@router.patch('/bins/{bin_id}/stolen')
+def stolen(bin_id: str, body: StolenInput, user=Depends(current_user), session=Depends(db)):
+    if user.role != 'Company':
+        raise HTTPException(403, 'Doar compania responsabilă gestionează starea de furt.')
+    item = owned_bin(session, user, bin_id)
+    item.is_stolen = body.stolen
+    session.commit()
+    return {'bin_id': bin_id, 'is_stolen': item.is_stolen}
 
 
 @router.post('/company/route')

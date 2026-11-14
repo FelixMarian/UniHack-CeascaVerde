@@ -1,5 +1,5 @@
 import os
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from sqlalchemy import select, delete
 from sqlalchemy.exc import IntegrityError
 from . import schemas as S
@@ -64,7 +64,8 @@ def bins(request: Request, user=Depends(current_user), session=Depends(db)):
 def collect(bin_id: str, request: Request, user=Depends(current_user), session=Depends(db)):
     if user.role != 'Company':
         raise HTTPException(403, 'Doar compania responsabilă poate confirma colectarea.')
-    owned_bin(session, user, bin_id)
+    if owned_bin(session, user, bin_id).is_stolen:
+        raise HTTPException(409, 'Tomberonul este marcat ca furat.')
     # No automatic retries: the legacy API has no idempotency key.
     return {'result': request.app.state.sw_legacy.collect(bin_id, user.username)}
 
@@ -80,16 +81,24 @@ def incidents(user=Depends(current_user), session=Depends(db)):
 
 
 @router.post('/incidents', status_code=201, tags=['Incidents'])
-def create_incident(body: S.IncidentCreate, user=Depends(current_user), session=Depends(db)):
+def create_incident(body: S.IncidentCreate, request: Request, background: BackgroundTasks, user=Depends(current_user), session=Depends(db)):
     if user.role != 'Resident':
         raise HTTPException(403, 'Sesizările sunt create de locatari.')
     owned_bin(session, user, body.bin_id)
+    if body.request_id:
+        existing = session.scalar(select(Incident).where(Incident.user_id == user.id, Incident.request_id == body.request_id))
+        if existing:
+            if (existing.bin_id, existing.category, existing.comment) != (body.bin_id, body.category, body.comment):
+                raise HTTPException(409, 'Identificatorul trimiterii aparține altei sesizări.')
+            return existing
     incident = Incident(**body.model_dump(), user_id=user.id)
     session.add(incident)
     session.flush()
     from .proofs import prepare
     prepare(incident)
     commit(session)
+    from .automatic_proofs import process
+    background.add_task(process, request.app.state.sw_sessions, incident.id)
     return incident
 
 

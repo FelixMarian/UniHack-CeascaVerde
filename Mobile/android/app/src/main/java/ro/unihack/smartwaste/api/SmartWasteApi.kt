@@ -7,6 +7,13 @@ interface SmartWasteApi {
     @PUT("api/v1/companies/{id}/hq") suspend fun hq(@Path("id") id: Int, @Body request: HQInput): User
     @PATCH("api/v1/bins/{id}/damage") suspend fun damage(@Path("id") id: String, @Body request: DamageInput): Map<String, Any>
     @POST("api/v1/company/route") suspend fun route(): CollectionRoute
+    @POST("api/v1/company/route/optimize") suspend fun optimize(@Body input: RouteInput): CollectionRoute
+    @GET("api/v1/company/routes") suspend fun routes(): List<CollectionRoute>
+    @POST("api/v1/company/routes/{id}/start") suspend fun startRoute(@Path("id") id: String): Map<String, String>
+    @POST("api/v1/company/routes/{id}/complete") suspend fun finishRoute(@Path("id") id: String, @Body input: FinishInput): Map<String, String>
+    @GET("api/v1/company/statistics") suspend fun statistics(): CompanyStats
+    @GET("api/v1/incidents/{id}/blockchain") suspend fun blockchain(@Path("id") id: Int): IncidentProof
+    @POST("api/v1/incidents/{id}/blockchain/retry") suspend fun retryProof(@Path("id") id: Int): IncidentProof
     @POST("api/v1/incidents/{id}/proof") suspend fun proof(@Path("id") id: Int): IncidentProof
     @POST("api/v1/auth/login") suspend fun login(@Body request: LoginRequest): LoginResponse
     @GET("api/v1/auth/me") suspend fun me(): User

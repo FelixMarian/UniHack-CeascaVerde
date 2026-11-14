@@ -1,10 +1,11 @@
 import os
+from uuid import uuid4
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from sqlalchemy import select, func
 from .iot import device
-from .models import Bin, UltrasonicMeasurement
+from .models import Bin, Collection, UltrasonicMeasurement, User
 from .security import db
 from .ultrasonic_classifier import parse_thresholds, classify, CalibrationError, SensorError
 
@@ -51,8 +52,15 @@ def ingest(body: UltrasonicReading, session=Depends(db)):
             distance_mid_cm=body.distance_mid_cm, distance_full_cm=body.distance_full_cm,
             distance_top_cm=body.distance_top_cm, battery=battery, config_hash=thresholds.fingerprint,
             recorded_at=func.clock_timestamp()))
+    if previous and previous.fill_category in (2, 3) and category == 1 and not (
+            bin.demo or bin.is_stolen or bin.is_damaged) and bin.company_id is not None:
+        company = session.get(User, bin.company_id)
+        if company and company.role == 'Company':
+            session.add(Collection(collection_id=uuid4(), bin_id=bin.bin_id,
+                                   confirmed_by=company.username, collected_at=func.clock_timestamp()))
     session.commit()
     return {'bin_id':body.bin_id, 'fill_category':category,
+            'previous_category': previous.fill_category if previous else None,
             'category_label':{1:'gol',2:'mediu',3:'plin'}[category],
             'changed':state_changed or coordinates_changed, 'measurement_saved':state_changed,
             'coordinates_updated':coordinates_changed, 'reason':'updated' if state_changed or coordinates_changed else 'unchanged'}

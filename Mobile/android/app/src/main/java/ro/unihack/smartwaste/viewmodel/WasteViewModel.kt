@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import retrofit2.HttpException
 import ro.unihack.smartwaste.model.*
 import ro.unihack.smartwaste.repository.WasteRepository
@@ -18,12 +19,14 @@ import java.io.IOException
 data class AppState(val restoring: Boolean = true, val busy: Boolean = false, val user: User? = null,
     val bins: List<Bin> = emptyList(), val incidents: List<Incident> = emptyList(), val users: List<User> = emptyList(),
     val error: String? = null, val message: String? = null,
-    val route: CollectionRoute? = null, val proofs: Map<Int, IncidentProof> = emptyMap())
+    val route: CollectionRoute? = null, val proofs: Map<Int, IncidentProof> = emptyMap(),
+    val statistics: CompanyStats? = null, val routes: List<CollectionRoute> = emptyList())
 
 class WasteViewModel(private val repository: WasteRepository) : ViewModel() {
     private val mutable = MutableStateFlow(AppState())
     val state = mutable.asStateFlow()
     private var job: Job? = null
+    private var pendingReport: IncidentInput? = null
 
     init {
         launch {
@@ -42,6 +45,7 @@ class WasteViewModel(private val repository: WasteRepository) : ViewModel() {
             try { block() }
             catch (e: CancellationException) { throw e }
             catch (e: Exception) {
+                if (ro.unihack.smartwaste.BuildConfig.DEBUG) android.util.Log.w("SmartWaste", "Request failed (${e.javaClass.simpleName})", e)
                 if (e is HttpException && e.code() == 401) {
                     repository.clearSession()
                     mutable.value = AppState(restoring = false, error = "Autentificare invalidă sau sesiune expirată.")
@@ -101,16 +105,62 @@ class WasteViewModel(private val repository: WasteRepository) : ViewModel() {
     }
     fun damage(bin: Bin) = mutate({}) { repository.api.damage(bin.bin_id, DamageInput(bin.fill_category != 4)) }
     fun hq(id: Int, input: HQInput, done: () -> Unit) = mutate(done) { repository.api.hq(id, input) }
-    fun generateRoute() = launch {
+    fun generateRoute(consumption: Double) = launch {
         mutable.update { it.copy(route = null) }
-        val route = repository.api.route()
+        val route = repository.api.optimize(RouteInput(consumption))
         mutable.update { it.copy(route = route) }
     }
     fun proof(id: Int) = launch {
         val proof = repository.api.proof(id)
         mutable.update { it.copy(proofs = it.proofs + (id to proof)) }
     }
-    fun report(input: IncidentInput, done: () -> Unit) = mutate(done) { repository.api.report(input) }
+    fun loadStatistics() = launch { val stats = repository.api.statistics(); mutable.update { it.copy(statistics = stats) } }
+    fun loadRoutes() = launch {
+        val routes = repository.api.routes()
+        mutable.update { it.copy(routes = routes, route = it.route ?: routes.firstOrNull { r -> r.status == "started" }) }
+    }
+    fun selectRoute(route: CollectionRoute) { mutable.update { it.copy(route = route) } }
+    fun startRoute(route: CollectionRoute, done: () -> Unit) = launch {
+        repository.api.startRoute(route.id)
+        mutable.update { it.copy(route = route.copy(status = "started")) }
+        done()
+    }
+    fun finishRoute(route: CollectionRoute, km: Double, done: () -> Unit) = launch {
+        repository.api.finishRoute(route.id, FinishInput(km))
+        mutable.update { it.copy(route = route.copy(status = "completed"), message = "Cursă finalizată. Kilometrajul declarat este inclus în statistici.") }
+        done()
+    }
+    private suspend fun waitProof(id: Int) {
+        repeat(25) {
+            val proof = repository.api.blockchain(id)
+            mutable.update { it.copy(proofs = it.proofs + (id to proof)) }
+            if (proof.status == "verified") {
+                mutable.update { it.copy(message = "Sesizarea #$id a fost salvată și verificată pe Solana Devnet.") }
+                return
+            }
+            if (proof.status == "failed") {
+                mutable.update { it.copy(message = null, error = "${proof.error_code}: sesizarea #$id este salvată, dar verificarea blockchain a eșuat: ${proof.message ?: proof.error_code}") }
+                return
+            }
+            delay(2000)
+        }
+        mutable.update { it.copy(message = null, error = "SOLANA_CONFIRMATION_PENDING: sesizarea #$id este salvată, dar confirmarea nu a sosit încă. Verificarea continuă pe Raspberry Pi.") }
+    }
+    fun retryProof(id: Int) = launch { repository.api.retryProof(id); waitProof(id) }
+    fun report(input: IncidentInput, done: () -> Unit) = launch {
+        val previous = pendingReport
+        val request = if (previous != null && previous.copy(request_id = null) == input.copy(request_id = null)) previous
+            else input.copy(request_id = java.util.UUID.randomUUID().toString())
+        pendingReport = request
+        val incident = repository.api.report(request)
+        pendingReport = null
+        mutable.update { it.copy(incidents = listOf(incident) + it.incidents.filterNot { row -> row.id == incident.id }) }
+        done()
+        mutable.update { it.copy(message = "Sesizarea #${incident.id} este salvată. Raspberry Pi verifică automat Solana…") }
+        try { waitProof(incident.id) }
+        catch (e: CancellationException) { throw e }
+        catch (_: Exception) { mutable.update { it.copy(message = null, error = "SOLANA_STATUS_UNAVAILABLE: sesizarea #${incident.id} este salvată, dar rezultatul verificării nu poate fi citit. Reîncearcă din lista sesizărilor.") } }
+    }
     fun status(id: Int, status: String) = mutate({}) { repository.api.status(id, StatusInput(status)) }
     fun collect(bin: Bin) = launch {
         repository.api.collect(bin.bin_id)

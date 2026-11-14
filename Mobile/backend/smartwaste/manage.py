@@ -23,7 +23,7 @@ def migrate(engine):
     # Add application metadata to bins; never alter measurements or collections.
     with engine.begin() as conn:
         if engine.dialect.name == 'postgresql':
-            for migration in ('001_mobile.sql', '002_ultrasonic.sql', '003_company_proofs.sql'):
+            for migration in ('001_mobile.sql', '002_ultrasonic.sql', '003_company_proofs.sql', '004_routes_statistics.sql', '005_optimal_routes.sql'):
                 sql = (Path(__file__).parent.parent / 'migrations' / migration).read_text(encoding='utf-8')
                 # SQLAlchemy owns the outer transaction across both additive migrations.
                 conn.exec_driver_sql(sql.replace('\nBEGIN;', '').replace('\nCOMMIT;', ''))
@@ -70,7 +70,7 @@ def load_environment(env_file=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=['inspect', 'migrate', 'seed'])
+    parser.add_argument('command', choices=['inspect', 'migrate', 'seed', 'demo-timisoara'])
     parser.add_argument('--env-file', type=Path, help='Explicit server .env path for package installation')
     args = parser.parse_args()
     if args.env_file is not None and not args.env_file.is_file():
@@ -91,6 +91,13 @@ def main():
     elif args.command == 'seed':
         seed(engine)
         print('Demo accounts and demo bin registrations ready. No measurements inserted.')
+    elif args.command == 'demo-timisoara':
+        if engine.dialect.name != 'postgresql':
+            raise SystemExit('The Timisoara demo requires PostgreSQL.')
+        script = (Path(__file__).resolve().parents[1] / 'demo_timisoara.sql').read_text(encoding='utf-8')
+        with engine.connect().execution_options(isolation_level='AUTOCOMMIT', no_parameters=True) as conn:
+            conn.exec_driver_sql(script)
+        print('Timisoara DEMO dataset ready for company1. Existing real bins and nonempty HQ preserved.')
 
 
 if __name__ == '__main__':

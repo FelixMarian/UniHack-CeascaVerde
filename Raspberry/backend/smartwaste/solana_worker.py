@@ -71,6 +71,13 @@ def main():
                 continue
             try:
                 status = publish_one(factory, incident_id, wallet)
+                from .automatic_proofs import save_status
+                if status == 'verified':
+                    save_status(factory, incident_id, 'verified')
+                elif status in ('invalid', 'content_changed'):
+                    save_status(factory, incident_id, 'failed', 'SOLANA_INVALID_PROOF')
+                else:
+                    save_status(factory, incident_id, 'pending', 'SOLANA_CONFIRMATION_PENDING')
                 if status == 'verified':
                     verified.add(incident_id)
                 print(f'Incident {incident_id}: {status}', flush=True)

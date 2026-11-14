@@ -8,8 +8,10 @@ import java.util.concurrent.TimeUnit
 
 fun api(baseUrl: String, store: TokenStore): SmartWasteApi {
     val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
-        .callTimeout(30, TimeUnit.SECONDS)
+        // Avoid stale idle sockets on Pi/hotspot links without retrying non-idempotent writes.
+        .connectionPool(okhttp3.ConnectionPool(0, 1, TimeUnit.SECONDS))
+        .connectTimeout(10, TimeUnit.SECONDS).readTimeout(90, TimeUnit.SECONDS)
+        .callTimeout(100, TimeUnit.SECONDS)
         .retryOnConnectionFailure(false)
         .followRedirects(false).followSslRedirects(false)
         .addInterceptor { chain ->
