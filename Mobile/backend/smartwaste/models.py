@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, Integer, Boolean, Float, ForeignKey, DateTime, CheckConstraint, Index, UniqueConstraint, Uuid, text
+from sqlalchemy import String, Text, Integer, Boolean, Float, ForeignKey, DateTime, CheckConstraint, Index, UniqueConstraint, Uuid, LargeBinary, text
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base
 
@@ -67,6 +67,7 @@ class Incident(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey('sw_users.id'))
     category: Mapped[str] = mapped_column(String(40))
     comment: Mapped[str] = mapped_column(String(2000))
+    photo_sha256: Mapped[str | None] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(20), default='open')
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
@@ -81,12 +82,19 @@ class Incident(Base):
                       UniqueConstraint('user_id', 'request_id', name='sw_incident_request_unique'))
 
 
+class IncidentPhoto(Base):
+    __tablename__ = 'sw_incident_photos'
+    incident_id: Mapped[int] = mapped_column(ForeignKey('sw_incidents.id', ondelete='CASCADE'), primary_key=True)
+    jpeg: Mapped[bytes] = mapped_column(LargeBinary)
+
+
 class UltrasonicMeasurement(Base):
     __tablename__ = 'sw_ultrasonic_measurements'
     id: Mapped[int] = mapped_column(primary_key=True)
     bin_id: Mapped[str] = mapped_column(ForeignKey('bins.bin_id'))
     fill_category: Mapped[int] = mapped_column(Integer)
-    distance_mid_cm: Mapped[float] = mapped_column(Float)
+    classification_confirmed: Mapped[bool] = mapped_column(Boolean, server_default=text('true'))
+    distance_mid_cm: Mapped[float | None] = mapped_column(Float)
     distance_full_cm: Mapped[float] = mapped_column(Float)
     distance_top_cm: Mapped[float] = mapped_column(Float)
     battery: Mapped[int | None] = mapped_column(Integer)

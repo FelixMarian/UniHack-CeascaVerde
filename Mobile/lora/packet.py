@@ -57,8 +57,10 @@ def validate_ultrasonic(data):
     }
     for name in ('distance_mid_cm','distance_full_cm','distance_top_cm'):
         value = field(data,name)
-        if type(value) not in (int,float) or not math.isfinite(value) or value <= 0:
-            raise ValueError(f'Invalid {name}; no echo must not be sent as zero')
+        if type(value) not in (int,float) or not math.isfinite(value):
+            raise ValueError(f'Invalid {name}; expected a distance in centimetres')
+        if value <= 0 and (name != 'distance_mid_cm' or value != -1):
+            raise ValueError(f'Invalid {name}; expected a positive distance')
         result[name] = float(value)
     battery = data.get('battery')
     if battery is not None:

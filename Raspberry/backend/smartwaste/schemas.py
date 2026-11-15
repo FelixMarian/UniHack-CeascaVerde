@@ -53,6 +53,7 @@ class IncidentCreate(Input):
     bin_id: str
     category: Literal['damaged', 'stolen', 'overflow', 'missed_collection', 'other']
     comment: str = Field(min_length=1, max_length=2000)
+    photo_base64: str | None = Field(default=None, max_length=700_000)
 
 
 class IncidentStatus(Input):

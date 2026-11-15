@@ -14,6 +14,12 @@ class SensorError(ValueError):
 
 
 @dataclass(frozen=True)
+class Classification:
+    category: int
+    confirmed: bool
+
+
+@dataclass(frozen=True)
 class Thresholds:
     mid: float
     full: float
@@ -48,17 +54,19 @@ def parse_thresholds(source: str) -> Thresholds:
     return Thresholds(*(values[k] for k in DEFINES), hashlib.sha256(canonical.encode()).hexdigest())
 
 
-def classify(mid: float, full: float, top: float, thresholds: Thresholds) -> int:
-    for distance in (mid, full, top):
+def classify(mid: float | None, full: float, top: float, thresholds: Thresholds) -> Classification:
+    distances = (full, top) if mid is None else (mid, full, top)
+    for distance in distances:
         if type(distance) not in (float, int) or not math.isfinite(distance) or not thresholds.minimum <= distance <= thresholds.maximum:
             raise SensorError('Distanță invalidă sau în afara intervalului calibrat. Starea anterioară este păstrată.')
-    at_mid, at_full = mid <= thresholds.mid, full <= thresholds.full
+    at_full = full <= thresholds.full
+    if mid is None and not at_full:
+        return Classification(1, False)
+    at_mid = mid is not None and mid <= thresholds.mid
     lateral = 3 if at_full else 2 if at_mid else 1
     # Top sensor validates the lateral candidate; it does not independently
     # promote medium to full. A confirmed rim detection has priority.
     confirmed = (top <= thresholds.top_full if lateral == 3 else
                  top <= thresholds.top_medium if lateral == 2 else
                  top > thresholds.top_medium)
-    if not confirmed:
-        raise SensorError(f'Validare nereușită pentru categoria {lateral}: distanța de sus nu confirmă senzorii laterali. Starea anterioară este păstrată.')
-    return lateral
+    return Classification(lateral if confirmed else 1, confirmed)

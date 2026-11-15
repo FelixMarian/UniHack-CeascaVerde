@@ -5,12 +5,12 @@
 
 // ======================================
 // SMARTWASTE - ESP32 LORA TRANSMITTER
-// 3x HC-SR04 + SX1278 Ra-02
+// ALWAYS TRANSMIT - EVEN IF SENSORS FAIL
 // ======================================
 
 // 1 = Dummy data
 // 0 = Real sensors
-#define TEST 1
+#define TEST 0
 
 // ---------- BIN CONFIGURATION ----------
 
@@ -21,14 +21,14 @@
 
 // ---------- ULTRASONIC PINS ----------
 
-#define US_MID_TRIG   25
-#define US_MID_ECHO   33
+#define US_MID_TRIG   22
+#define US_MID_ECHO   32
 
-#define US_FULL_TRIG  27
-#define US_FULL_ECHO  32
+#define US_FULL_TRIG  25
+#define US_FULL_ECHO  33
 
-#define US_TOP_TRIG   21
-#define US_TOP_ECHO   22
+#define US_TOP_TRIG   27
+#define US_TOP_ECHO   35
 
 // ---------- LORA PINS ----------
 
@@ -48,11 +48,13 @@
 
 const unsigned long SEND_INTERVAL_MS = 5000;
 const unsigned long ECHO_TIMEOUT_US = 30000;
+const unsigned long SENSOR_DELAY_MS = 60;
 
 const float MIN_DISTANCE_CM = 2.0f;
 const float MAX_DISTANCE_CM = 400.0f;
 
-const unsigned long SENSOR_DELAY_MS = 60;
+// Invalid sensor value
+const float INVALID_DISTANCE = -1.0f;
 
 unsigned long lastSend = 0;
 
@@ -76,7 +78,7 @@ int dummyIndex = 0;
 #endif
 
 // ======================================
-// ULTRASONIC INITIALIZATION
+// INITIALIZE ULTRASONIC SENSOR
 // ======================================
 
 void initUltrasonic(int trigPin, int echoPin)
@@ -88,20 +90,18 @@ void initUltrasonic(int trigPin, int echoPin)
 }
 
 // ======================================
-// READ DISTANCE (CENTIMETERS)
+// READ ULTRASONIC DISTANCE
+// RETURNS -1 IF SENSOR FAILS
 // ======================================
 
-bool readDistanceCm(
-    int trigPin,
-    int echoPin,
-    float &distanceCm
-)
+float readDistanceCm(int trigPin, int echoPin)
 {
     digitalWrite(trigPin, LOW);
     delayMicroseconds(2);
 
     digitalWrite(trigPin, HIGH);
     delayMicroseconds(10);
+
     digitalWrite(trigPin, LOW);
 
     unsigned long duration = pulseIn(
@@ -111,74 +111,64 @@ bool readDistanceCm(
     );
 
     if (duration == 0) {
-        return false;
+        return INVALID_DISTANCE;
     }
 
-    float measuredDistance =
-        (duration * 0.0343f) / 2.0f;
+    float distance = (duration * 0.0343f) / 2.0f;
 
-    if (measuredDistance < MIN_DISTANCE_CM ||
-        measuredDistance > MAX_DISTANCE_CM) {
-        return false;
+    if (distance < MIN_DISTANCE_CM ||
+        distance > MAX_DISTANCE_CM) {
+        return INVALID_DISTANCE;
     }
 
-    distanceCm = measuredDistance;
-
-    return true;
+    return distance;
 }
 
 // ======================================
-// READ ALL THREE SENSORS
+// READ ALL SENSORS
+// NEVER BLOCK TRANSMISSION
 // ======================================
 
-bool readAllSensors(
+void readAllSensors(
     float &distanceMid,
     float &distanceFull,
     float &distanceTop
 )
 {
-    bool midValid = readDistanceCm(
+    distanceMid = readDistanceCm(
         US_MID_TRIG,
-        US_MID_ECHO,
-        distanceMid
+        US_MID_ECHO
     );
 
     delay(SENSOR_DELAY_MS);
 
-    bool fullValid = readDistanceCm(
+    distanceFull = readDistanceCm(
         US_FULL_TRIG,
-        US_FULL_ECHO,
-        distanceFull
+        US_FULL_ECHO
     );
 
     delay(SENSOR_DELAY_MS);
 
-    bool topValid = readDistanceCm(
+    distanceTop = readDistanceCm(
         US_TOP_TRIG,
-        US_TOP_ECHO,
-        distanceTop
+        US_TOP_ECHO
     );
 
-    if (!midValid || !fullValid || !topValid) {
-        Serial.println(
-            "ERROR: Invalid ultrasonic measurement"
-        );
-
-        Serial.printf(
-            "MID: %s | FULL: %s | TOP: %s\n",
-            midValid ? "OK" : "FAIL",
-            fullValid ? "OK" : "FAIL",
-            topValid ? "OK" : "FAIL"
-        );
-
-        return false;
+    if (distanceMid < 0) {
+        Serial.println("WARNING: MID sensor failed");
     }
 
-    return true;
+    if (distanceFull < 0) {
+        Serial.println("WARNING: FULL sensor failed");
+    }
+
+    if (distanceTop < 0) {
+        Serial.println("WARNING: TOP sensor failed");
+    }
 }
 
 // ======================================
-// CREATE AND SEND JSON OVER LORA
+// SEND JSON OVER LORA
 // ======================================
 
 bool sendLoRaJSON(
@@ -209,60 +199,58 @@ bool sendLoRaJSON(
     if (length <= 0 ||
         length >= (int)sizeof(payload) ||
         length > 255) {
-        Serial.println(
-            "ERROR: JSON payload too large"
-        );
+        Serial.println("ERROR: Payload too large!");
         return false;
     }
 
-    Serial.println("----------------------");
-    Serial.println("Sending JSON:");
+    Serial.println("-----------------------------");
+    Serial.println("SENDING LORA PACKET:");
     Serial.println(payload);
 
     if (LoRa.beginPacket() == 0) {
-        Serial.println(
-            "ERROR: Cannot start LoRa packet"
-        );
+        Serial.println("ERROR: Cannot start packet!");
         return false;
     }
 
-    LoRa.write(
+    size_t written = LoRa.write(
         (const uint8_t *)payload,
         (size_t)length
     );
 
-    if (LoRa.endPacket() != 1) {
-        Serial.println(
-            "ERROR: LoRa transmission failed"
-        );
+    if (written != (size_t)length) {
+        Serial.println("ERROR: Incomplete packet write!");
+        LoRa.endPacket();
         return false;
     }
 
-    Serial.println(
-        "LoRa transmission completed!"
-    );
+    if (LoRa.endPacket() != 1) {
+        Serial.println("ERROR: LoRa TX failed!");
+        return false;
+    }
+
+    Serial.println("LORA PACKET TRANSMITTED!");
+    Serial.println("-----------------------------");
 
     return true;
 }
 
 // ======================================
-// MEASUREMENT AND TRANSMISSION
+// MEASURE AND TRANSMIT
 // ======================================
 
 void measureAndTransmit()
 {
-    float distanceMid = 0.0f;
-    float distanceFull = 0.0f;
-    float distanceTop = 0.0f;
+    float distanceMid = INVALID_DISTANCE;
+    float distanceFull = INVALID_DISTANCE;
+    float distanceTop = INVALID_DISTANCE;
 
     Serial.println();
-    Serial.println("======================");
-    Serial.println("SMARTWASTE MEASUREMENT");
-    Serial.println("======================");
+    Serial.println("=============================");
+    Serial.println("SMARTWASTE TRANSMISSION");
+    Serial.println("=============================");
 
 #if TEST
 
-    // Use simulated measurements
     Serial.println("MODE: TEST");
 
     distanceMid = dummyData[dummyIndex][0];
@@ -277,33 +265,43 @@ void measureAndTransmit()
 
 #else
 
-    // Use real HC-SR04 measurements
     Serial.println("MODE: REAL SENSORS");
 
-    bool valid = readAllSensors(
+    readAllSensors(
         distanceMid,
         distanceFull,
         distanceTop
     );
-
-    if (!valid) {
-        Serial.println(
-            "Packet skipped. Retrying next cycle."
-        );
-        return;
-    }
 
 #endif
 
-    Serial.printf("MID:  %.2f cm\n", distanceMid);
-    Serial.printf("FULL: %.2f cm\n", distanceFull);
-    Serial.printf("TOP:  %.2f cm\n", distanceTop);
+    Serial.printf(
+        "MID:  %.2f cm\n",
+        distanceMid
+    );
 
-    sendLoRaJSON(
+    Serial.printf(
+        "FULL: %.2f cm\n",
+        distanceFull
+    );
+
+    Serial.printf(
+        "TOP:  %.2f cm\n",
+        distanceTop
+    );
+
+    // ALWAYS ATTEMPT TRANSMISSION
+    // EVEN IF ALL SENSORS FAILED
+
+    bool success = sendLoRaJSON(
         distanceMid,
         distanceFull,
         distanceTop
     );
+
+    if (!success) {
+        Serial.println("WARNING: LoRa TX attempt failed!");
+    }
 }
 
 // ======================================
@@ -316,30 +314,28 @@ void setup()
 
     delay(1000);
 
-    Serial.println(
-        "SMARTWASTE ESP32 TRANSMITTER"
-    );
+    Serial.println("SMARTWASTE ESP32 TRANSMITTER");
+    Serial.println("ALWAYS TRANSMIT MODE");
 
-#if TEST
-    Serial.println("TEST MODE ENABLED");
-#else
-    Serial.println("REAL SENSOR MODE ENABLED");
-#endif
+    // Initialize ultrasonic sensors
 
-    // Keep original sensor initialization
     initUltrasonic(
-        US_MID_TRIG, US_MID_ECHO
+        US_MID_TRIG,
+        US_MID_ECHO
     );
 
     initUltrasonic(
-        US_FULL_TRIG, US_FULL_ECHO
+        US_FULL_TRIG,
+        US_FULL_ECHO
     );
 
     initUltrasonic(
-        US_TOP_TRIG, US_TOP_ECHO
+        US_TOP_TRIG,
+        US_TOP_ECHO
     );
 
-    // Original SPI initialization
+    // Initialize SPI
+
     SPI.begin(
         LORA_SCK,
         LORA_MISO,
@@ -347,25 +343,26 @@ void setup()
         LORA_SS
     );
 
-    // Original LoRa control pins
+    // Configure LoRa pins
+
     LoRa.setPins(
         LORA_SS,
         LORA_RST,
         LORA_DIO0
     );
 
-    // Original LoRa initialization
+    // Initialize LoRa
+
     if (!LoRa.begin(LORA_FREQ)) {
-        Serial.println(
-            "ERROR: LoRa initialization failed!"
-        );
+        Serial.println("ERROR: LoRa initialization failed!");
 
         while (true) {
             delay(1000);
         }
     }
 
-    // Original radio settings
+    // Radio configuration
+
     LoRa.setSpreadingFactor(7);
     LoRa.setSignalBandwidth(125E3);
     LoRa.setCodingRate4(5);
@@ -373,19 +370,14 @@ void setup()
     LoRa.enableCrc();
     LoRa.setTxPower(14);
 
-    Serial.println(
-        "LoRa initialized successfully!"
-    );
-
-    Serial.println(
-        "433.92 MHz | SF7 | BW125 | CR4/5"
-    );
-
-    Serial.println(
-        "Sync: 0x12 | CRC: Enabled"
-    );
+    Serial.println("LoRa initialized successfully!");
+    Serial.println("Frequency: 433.92 MHz");
+    Serial.println("SF7 | BW125 | CR4/5");
+    Serial.println("Sync Word: 0x12");
+    Serial.println("CRC: Enabled");
 
     // First transmission
+
     measureAndTransmit();
 
     lastSend = millis();
@@ -399,6 +391,7 @@ void loop()
 {
     if (millis() - lastSend >= SEND_INTERVAL_MS) {
         lastSend = millis();
+
         measureAndTransmit();
     }
 }

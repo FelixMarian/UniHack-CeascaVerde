@@ -1,5 +1,18 @@
 # API mobil v1
 
+## Extensii 1.3.0
+
+- `POST /api/v1/incidents`: primește opțional `request_id` (UUID client) și pornește automat publicarea/verificarea Solana în background. HTTP 201 înseamnă sesizare salvată; nu implică blockchain verificat. Aceeași cerere repetată cu același user/request_id întoarce sesizarea existentă; conținut diferit →409.
+- `GET /api/v1/incidents/{id}/blockchain`: statusul calculat pe server, `error_code`, mesaj, hash și semnătură. Acces limitat autorului/companiei responsabile/Admin.
+- `POST /api/v1/incidents/{id}/blockchain/retry`: reia verificarea aceleiași sesizări; 202. Clientul nu deține chei Solana.
+- `POST /api/v1/company/route/optimize`: `{consumption: 20}` în L/100 km. HQ obligatoriu. Gemini + ORS, max.12 opriri; întoarce `id`, `stops`, geometrie `[lat,lon]`, metri/secunde rutieri și combustibil estimat. Persistă `sw_trips` cu status planned, fără a contoriza km parcurși.
+- `GET /api/v1/company/routes`: ultimele 30 de rute proprii salvate.
+- `POST /api/v1/company/routes/{id}/start`: planned→started, repetabil fără dublare.
+- `POST /api/v1/company/routes/{id}/complete`: `{actual_km: 12.4}`, started→completed. Aceeași finalizare repetată nu dublează totalurile; alt kilometraj după finalizare →409.
+- `GET /api/v1/company/statistics`: perioade zi/săptămână/lună București, istoric 14 zile și indicatori per tomberon pe 90 de zile; km declarați și litri estimați numai pentru curse finalizate.
+
+Toate rutele company necesită rol Company și izolează datele pe companie. Keys Gemini/ORS rămân în .env pe server. Vezi UPDATE-1.3.0 pentru limite și sursele datelor.
+
 ## Extensii 1.2.0
 
 Toate endpoint-urile de mai jos cer Bearer și verifică rolul/asignarea în baza de date.

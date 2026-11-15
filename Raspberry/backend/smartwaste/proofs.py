@@ -54,6 +54,8 @@ def content_hash(item):
     payload = {'version': 1, 'nonce': item.proof_nonce, 'id': item.id,
                'bin_id': item.bin_id, 'user_id': item.user_id, 'category': item.category,
                'comment': item.comment, 'created_at': created.astimezone(timezone.utc).isoformat()}
+    if item.photo_sha256:
+        payload['photo_sha256'] = item.photo_sha256
     # Workflow status deliberately excluded: resolving an incident does not rewrite its report.
     canonical = json.dumps(payload, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
     return hashlib.sha256(canonical.encode('utf-8')).hexdigest()

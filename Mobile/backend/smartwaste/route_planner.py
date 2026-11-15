@@ -50,7 +50,7 @@ def optimal_order(matrix):
     return order[::-1]
 
 
-def plan(hq, bins):
+def road_matrix(hq, bins):
     ors = os.getenv('OPENROUTESERVICE_API_KEY')
     if not ors:
         raise HTTPException(503, 'Configurează OPENROUTESERVICE_API_KEY în .env pe Raspberry Pi.')
@@ -63,7 +63,10 @@ def plan(hq, bins):
     if not isinstance(matrix, list) or len(matrix) != n or any(not isinstance(row, list) or len(row) != n or
         any(not isinstance(v, (float, int)) or not math.isfinite(v) or v < 0 for v in row) for row in matrix):
         raise HTTPException(422, 'Cel puțin o oprire nu este accesibilă rutier. Verifică coordonatele tomberoanelor.')
-    order = optimal_order(matrix)
+    return ors, coords, matrix
+
+
+def draw_plan(ors, coords, bins, order):
     geometry = post('https://api.openrouteservice.org/v2/directions/driving-car/geojson', ors,
         {'coordinates': [coords[0]] + [coords[i] for i in order] + [coords[0]], 'instructions': False})
     try:
@@ -79,3 +82,8 @@ def plan(hq, bins):
         raise HTTPException(502, 'Geometria rutieră primită nu este validă.') from None
     return {'stops': [bins[i-1] for i in order], 'geometry': [[p[1], p[0]] for p in points],
             'distance_meters': distance, 'duration_seconds': duration, 'planner': 'Held–Karp + openrouteservice'}
+
+
+def plan(hq, bins):
+    ors, coords, matrix = road_matrix(hq, bins)
+    return draw_plan(ors, coords, bins, optimal_order(matrix))

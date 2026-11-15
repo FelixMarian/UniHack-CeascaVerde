@@ -1,0 +1,5 @@
+ALTER TABLE sw_incidents ADD COLUMN IF NOT EXISTS photo_sha256 VARCHAR(64);
+CREATE TABLE IF NOT EXISTS sw_incident_photos (
+    incident_id INTEGER PRIMARY KEY REFERENCES sw_incidents(id) ON DELETE CASCADE,
+    jpeg BYTEA NOT NULL
+);

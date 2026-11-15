@@ -1,9 +1,11 @@
 import os
+import hashlib
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from sqlalchemy import select, delete
 from sqlalchemy.exc import IntegrityError
 from . import schemas as S
-from .models import User, Bin, Assignment, Incident, Session, now
+from .models import User, Bin, Assignment, Incident, IncidentPhoto, Session, now
+from .incident_photos import normalized_jpeg
 from .security import db, current_user, admin, passwords, dummy_hash, public_user, issue, revoke, digest, bearer
 from .services import visible_bins, owned_bin, company, bin_json, latest_categories
 
@@ -85,21 +87,36 @@ def create_incident(body: S.IncidentCreate, request: Request, background: Backgr
     if user.role != 'Resident':
         raise HTTPException(403, 'Sesizările sunt create de locatari.')
     owned_bin(session, user, body.bin_id)
+    jpeg = normalized_jpeg(body.photo_base64) if body.photo_base64 is not None else None
+    photo_hash = hashlib.sha256(jpeg).hexdigest() if jpeg is not None else None
     if body.request_id:
         existing = session.scalar(select(Incident).where(Incident.user_id == user.id, Incident.request_id == body.request_id))
         if existing:
-            if (existing.bin_id, existing.category, existing.comment) != (body.bin_id, body.category, body.comment):
+            if (existing.bin_id, existing.category, existing.comment, existing.photo_sha256) != (body.bin_id, body.category, body.comment, photo_hash):
                 raise HTTPException(409, 'Identificatorul trimiterii aparține altei sesizări.')
             return existing
-    incident = Incident(**body.model_dump(), user_id=user.id)
+    incident = Incident(**body.model_dump(exclude={'photo_base64'}), user_id=user.id, photo_sha256=photo_hash)
     session.add(incident)
     session.flush()
+    if jpeg is not None:
+        session.add(IncidentPhoto(incident_id=incident.id, jpeg=jpeg))
     from .proofs import prepare
     prepare(incident)
     commit(session)
     from .automatic_proofs import process
     background.add_task(process, request.app.state.sw_sessions, incident.id)
     return incident
+
+
+@router.get('/incidents/{incident_id}/photo', tags=['Incidents'])
+def incident_photo(incident_id: int, user=Depends(current_user), session=Depends(db)):
+    from .proofs import accessible
+    incident = accessible(session, user, incident_id)
+    photo = session.get(IncidentPhoto, incident_id)
+    if photo is None or hashlib.sha256(photo.jpeg).hexdigest() != incident.photo_sha256:
+        raise HTTPException(404, 'Fotografie indisponibilă.')
+    return Response(photo.jpeg, media_type='image/jpeg',
+                    headers={'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'})
 
 
 @router.patch('/incidents/{incident_id}', tags=['Incidents'])

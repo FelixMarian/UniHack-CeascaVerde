@@ -20,12 +20,14 @@ def inspect_schema(engine):
 
 
 def migrate(engine):
-    # Add application metadata to bins; never alter measurements or collections.
+    # Apply additive migrations without rewriting stored values.
     with engine.begin() as conn:
         if engine.dialect.name == 'postgresql':
-            for migration in ('001_mobile.sql', '002_ultrasonic.sql', '003_company_proofs.sql', '004_routes_statistics.sql', '005_optimal_routes.sql'):
+            for migration in ('001_mobile.sql', '002_ultrasonic.sql', '003_company_proofs.sql',
+                              '004_routes_statistics.sql', '005_optimal_routes.sql', '006_incident_photos.sql',
+                              '007_ultrasonic_confirmation.sql', '008_optional_mid_reading.sql'):
                 sql = (Path(__file__).parent.parent / 'migrations' / migration).read_text(encoding='utf-8')
-                # SQLAlchemy owns the outer transaction across both additive migrations.
+                # SQLAlchemy owns the outer transaction across all migrations.
                 conn.exec_driver_sql(sql.replace('\nBEGIN;', '').replace('\nCOMMIT;', ''))
         else:
             Base.metadata.create_all(conn)  # SQLite is exclusively a test fixture.
